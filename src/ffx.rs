@@ -11,7 +11,7 @@ struct FFXSizeLimits {
     txt: SizeLimits,
 }
 
-struct FFX {
+pub struct FFX {
     cipher: openssl::cipher_ctx::CipherCtx,
 
     radix: usize,
@@ -114,26 +114,7 @@ impl FFX {
         })
     }
 
-    unsafe fn openssl_prf(
-        &self,
-        d: &mut [u8],
-        s: &[u8],
-    ) -> std::result::Result<(), openssl::error::ErrorStack> {
-        let blksz = self.cipher.block_size();
-
-        let mut c = openssl::cipher_ctx::CipherCtx::new()?;
-        c.copy(&self.cipher)?;
-
-        for i in 0..(s.len() / blksz) {
-            c.cipher_update_unchecked(&s[i..(i + blksz)], Some(d))?;
-        }
-
-        c.cipher_final_unchecked(d)?;
-
-        Ok(())
-    }
-
-    pub(crate) fn prf(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
+    pub fn prf(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
         let blksz = self.cipher.block_size();
 
         if s.len() % blksz != 0 {
@@ -142,22 +123,28 @@ impl FFX {
             ));
         }
 
+        if d.len() < blksz {
+            return Err(Error::new(&format!(
+                "destination buffer must be at least {} bytes",
+                blksz
+            )));
+        }
+
+        let mut c = openssl::cipher_ctx::CipherCtx::new()?;
+        c.copy(&self.cipher)?;
+
         unsafe {
-            if d.len() < blksz {
-                return Err(Error::new(&format!(
-                    "destination buffer must be at least {} bytes",
-                    blksz
-                )));
+            for i in 0..(s.len() / blksz) {
+                c.cipher_update_unchecked(&s[i..(i + blksz)], Some(d))?;
             }
 
-            match self.openssl_prf(d, s) {
-                Err(e) => Err(Error::new(&e.to_string())),
-                Ok(_) => Ok(()),
-            }
+            c.cipher_final_unchecked(d)?;
         }
+
+        Ok(())
     }
 
-    pub(crate) fn ciph(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
+    pub fn ciph(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
         self.prf(d, &s[0..16])
     }
 }

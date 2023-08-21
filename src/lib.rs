@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+pub mod ff1;
 pub(crate) mod ffx;
 
 pub mod error {
@@ -13,6 +14,17 @@ pub mod error {
             Error {
                 why: why.to_string(),
             }
+        }
+
+        #[allow(dead_code)]
+        pub fn not_implemented() -> Self {
+            Self::new("not implemented")
+        }
+    }
+
+    impl From<openssl::error::ErrorStack> for Error {
+        fn from(e: openssl::error::ErrorStack) -> Self {
+            Error::new(&e.to_string())
         }
     }
 }
