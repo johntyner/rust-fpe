@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 openssl = "0.10.56"
+byteorder = "1.4.3"

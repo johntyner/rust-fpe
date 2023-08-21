@@ -160,7 +160,8 @@ impl FFX {
 
         unsafe {
             for i in 0..(s.len() / blksz) {
-                c.cipher_update_unchecked(&s[i..(i + blksz)], Some(d))?;
+                let j = i * blksz;
+                c.cipher_update_unchecked(&s[j..(j + blksz)], Some(d))?;
             }
 
             c.cipher_final_unchecked(d)?;
@@ -176,8 +177,8 @@ impl FFX {
 
 pub fn reverse<T: Copy>(s: &[T]) -> Vec<T> {
     let mut d = Vec::<T>::with_capacity(s.len());
-    for i in 0..s.len() {
-        d.push(s[s.len() - i - 1]);
+    for i in 1..=s.len() {
+        d.push(s[s.len() - i]);
     }
     d
 }
