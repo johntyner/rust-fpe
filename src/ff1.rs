@@ -27,7 +27,7 @@ impl FF1 {
         mintwk: usize,
         maxtwk: usize,
         radix: usize,
-        opt_alpha: Option<String>,
+        opt_alpha: Option<&str>,
     ) -> Result<Self> {
         Ok(FF1 {
             ffx: ffx::FFX::new(

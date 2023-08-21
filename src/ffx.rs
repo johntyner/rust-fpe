@@ -31,7 +31,7 @@ impl FFX {
         mintwk: usize,
         maxtwk: usize,
         radix: usize,
-        opt_alpha: Option<String>,
+        opt_alpha: Option<&str>,
     ) -> Result<Self> {
         let alpha: &str;
         if opt_alpha.is_some() {
@@ -132,7 +132,9 @@ impl FFX {
     }
 
     pub fn validate_tweak_length(&self, n: usize) -> Result<()> {
-        if n < self.len.twk.min || n > self.len.twk.max {
+        if n < self.len.twk.min
+            || (self.len.twk.max > 0 && n > self.len.twk.max)
+        {
             return Err(Error::new("invalid tweak length"));
         }
 
