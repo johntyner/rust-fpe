@@ -109,8 +109,6 @@ impl FF3_1 {
             c = ffx::chars_to_bignum(&B, &alpha)?;
             P[0][4..16].copy_from_slice(&c.to_vec_padded(12)?);
 
-            println!("{:?}", P[0]);
-
             P[0].reverse();
             {
                 let (P0, P1) = P.split_at_mut(1);
