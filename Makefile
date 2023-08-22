@@ -14,6 +14,9 @@ doc d:
 fmt:
 	$(QUIET)cargo $(@) --all -- -l
 
+bench:
+	$(QUIET)cargo $(@)
+
 devclean:
 	$(QUIET)find . -name "*~" -exec rm -f {} \;
 
