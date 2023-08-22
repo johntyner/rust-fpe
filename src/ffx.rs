@@ -3,6 +3,11 @@ use crate::result::Result;
 
 use std::ops::Add;
 
+pub enum CipherType {
+    Encrypt,
+    Decrypt,
+}
+
 struct SizeLimits {
     min: usize,
     max: usize,
@@ -51,7 +56,7 @@ impl FFX {
             return Err(Error::new("unsupported radix/maximum text length"));
         }
 
-        if mintwk < maxtwk {
+        if mintwk > maxtwk {
             return Err(Error::new(
                 "minimum tweak length must be less than maximum",
             ));

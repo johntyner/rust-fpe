@@ -15,11 +15,6 @@ pub struct FF1 {
     ffx: ffx::FFX,
 }
 
-enum CipherType {
-    Encrypt,
-    Decrypt,
-}
-
 impl FF1 {
     pub fn new(
         key: &[u8],
@@ -44,9 +39,9 @@ impl FF1 {
 
     fn cipher_chars(
         &self,
-        X: &Vec<char>,
+        X: &[char],
         opt_twk: Option<&[u8]>,
-        which: CipherType,
+        which: ffx::CipherType,
     ) -> Result<Vec<char>> {
         let ffx = &self.ffx;
 
@@ -109,7 +104,7 @@ impl FF1 {
             mV = mV.mul(&y);
         }
 
-        if let CipherType::Decrypt = which {
+        if let ffx::CipherType::Decrypt = which {
             std::mem::swap(&mut nA, &mut nB);
             std::mem::swap(&mut mU, &mut mV);
         }
@@ -120,12 +115,11 @@ impl FF1 {
                 let Q_len = Q.len();
 
                 match which {
-                    CipherType::Encrypt => Q[Q.len() - b - 1] = i - 1,
-                    CipherType::Decrypt => Q[Q.len() - b - 1] = 10 - i,
+                    ffx::CipherType::Encrypt => Q[Q.len() - b - 1] = i - 1,
+                    ffx::CipherType::Decrypt => Q[Q.len() - b - 1] = 10 - i,
                 }
 
-                let q = nB.to_vec_padded(b as i32)?;
-                Q[Q_len - b..].copy_from_slice(&q);
+                Q[Q_len - b..].copy_from_slice(&nB.to_vec_padded(b as i32)?);
             }
 
             ffx.prf(&mut R[..16], &P)?;
@@ -143,20 +137,20 @@ impl FF1 {
             y.copy_from_slice(&R[..d])?;
 
             match which {
-                CipherType::Encrypt => nA = nA.add(&y),
-                CipherType::Decrypt => nA = nA.sub(&y),
+                ffx::CipherType::Encrypt => nA = nA.add(&y),
+                ffx::CipherType::Decrypt => nA = nA.sub(&y),
             }
 
             std::mem::swap(&mut nA, &mut nB);
 
-            let div = if i % 2 == 0 { &mV } else { &mU };
-            nB = nB.rem(div);
+            nB = nB.rem(&mU);
             if nB.is_negative() {
-                nB = nB.add(div);
+                nB = nB.add(&mU);
             }
+            std::mem::swap(&mut mU, &mut mV);
         }
 
-        if let CipherType::Decrypt = which {
+        if let ffx::CipherType::Decrypt = which {
             std::mem::swap(&mut nA, &mut nB);
         }
 
@@ -171,7 +165,7 @@ impl FF1 {
         &self,
         inp: &str,
         opt_twk: Option<&[u8]>,
-        which: CipherType,
+        which: ffx::CipherType,
     ) -> Result<String> {
         let mut X = Vec::<char>::new();
         inp.chars().for_each(|c| X.push(c));
@@ -181,11 +175,11 @@ impl FF1 {
     }
 
     pub fn encrypt(&self, pt: &str, opt_twk: Option<&[u8]>) -> Result<String> {
-        self.cipher_string(pt, opt_twk, CipherType::Encrypt)
+        self.cipher_string(pt, opt_twk, ffx::CipherType::Encrypt)
     }
 
     pub fn decrypt(&self, ct: &str, opt_twk: Option<&[u8]>) -> Result<String> {
-        self.cipher_string(ct, opt_twk, CipherType::Decrypt)
+        self.cipher_string(ct, opt_twk, ffx::CipherType::Decrypt)
     }
 }
 
