@@ -126,7 +126,7 @@ impl FF1 {
 
             for j in 1..R.len() / 16 {
                 let (s, d) = R.split_at_mut(16);
-                let l = j * 16;
+                let l = (j - 1) * 16;
 
                 let w = byteorder::BigEndian::read_u32(&s[12..16]);
                 byteorder::BigEndian::write_u32(&mut s[12..16], w ^ j as u32);
