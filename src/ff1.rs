@@ -135,7 +135,6 @@ impl FF1 {
             }
 
             y.copy_from_slice(&R[..d])?;
-
             match which {
                 ffx::CipherType::Encrypt => nA = nA.add(&y),
                 ffx::CipherType::Decrypt => nA = nA.sub(&y),
