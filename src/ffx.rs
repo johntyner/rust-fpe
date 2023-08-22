@@ -2,7 +2,6 @@ use crate::error::Error;
 use crate::result::Result;
 
 use std::ops::Add;
-use std::ops::Mul;
 
 struct SizeLimits {
     min: usize,
@@ -189,30 +188,30 @@ pub fn chars_to_big_num(
     chars: &[char],
     alpha: &[char],
 ) -> Result<openssl::bn::BigNum> {
+    let radix = alpha.len();
+
     let mut n = openssl::bn::BigNum::from_u32(0)?;
     let mut m = openssl::bn::BigNum::from_u32(1)?;
-    let mut t = openssl::bn::BigNum::new()?;
 
     for c in reverse(chars) {
-        let mut idx = alpha.len();
+        let mut idx = radix;
 
-        for i in 0..alpha.len() {
+        for i in 0..radix {
             if c == alpha[i] {
                 idx = i;
                 break;
             }
         }
 
-        if idx >= alpha.len() {
+        if idx >= radix {
             return Err(Error::new("invalid character encountered"));
         } else if idx > 0 {
-            t.clear();
-            t.add_word(idx as u32)?;
-            t = t.mul(&m);
+            let mut t = m.to_owned()?;
+            t.mul_word(idx as u32)?;
             n = n.add(&t);
         }
 
-        m.mul_word(alpha.len() as u32)?;
+        m.mul_word(radix as u32)?;
     }
 
     Ok(n)
