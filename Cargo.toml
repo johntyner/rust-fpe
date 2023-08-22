@@ -15,3 +15,7 @@ bencher = "0.1.5"
 [[bench]]
 name = "ff1"
 harness = false
+
+[[bench]]
+name = "ff3_1"
+harness = false
