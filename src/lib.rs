@@ -1,11 +1,10 @@
-#![allow(dead_code)]
-
 pub mod ff1;
 pub(crate) mod ffx;
 
 pub mod error {
     #[derive(Debug)]
     pub struct Error {
+        #[allow(dead_code)]
         why: String,
     }
 
@@ -14,11 +13,6 @@ pub mod error {
             Error {
                 why: why.to_string(),
             }
-        }
-
-        #[allow(dead_code)]
-        pub fn not_implemented() -> Self {
-            Self::new("not implemented")
         }
     }
 

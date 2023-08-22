@@ -176,29 +176,22 @@ impl FFX {
     }
 }
 
-pub fn reverse<T: Copy>(s: &[T]) -> Vec<T> {
-    let mut d = Vec::<T>::with_capacity(s.len());
-    for i in 1..=s.len() {
-        d.push(s[s.len() - i]);
-    }
-    d
-}
-
 pub fn chars_to_big_num(
     chars: &[char],
     alpha: &[char],
 ) -> Result<openssl::bn::BigNum> {
+    let chars_len = chars.len();
     let radix = alpha.len();
 
     let mut n = openssl::bn::BigNum::from_u32(0)?;
     let mut m = openssl::bn::BigNum::from_u32(1)?;
 
-    for c in reverse(chars) {
+    for i in (0..chars_len).rev() {
         let mut idx = radix;
 
-        for i in 0..radix {
-            if c == alpha[i] {
-                idx = i;
+        for j in 0..radix {
+            if chars[i] == alpha[j] {
+                idx = j;
                 break;
             }
         }
@@ -231,11 +224,12 @@ pub fn big_num_to_chars(
         chars.push(alpha[r as usize]);
     }
 
-    if opt_len.is_some() {
-        let l = opt_len.unwrap();
-
-        while chars.len() < l {
-            chars.push(alpha[0]);
+    match opt_len {
+        None => (),
+        Some(l) => {
+            while chars.len() < l {
+                chars.push(alpha[0]);
+            }
         }
     }
 
