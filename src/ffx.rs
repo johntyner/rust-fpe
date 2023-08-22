@@ -19,7 +19,9 @@ struct FFXSizeLimits {
 }
 
 pub struct FFX {
-    cipher: openssl::cipher_ctx::CipherCtx,
+    algo: &'static openssl::cipher::CipherRef,
+    key: Vec<u8>,
+
     twk: Vec<u8>,
     len: FFXSizeLimits,
     alpha: Vec<char>,
@@ -28,6 +30,25 @@ pub struct FFX {
 const DEFAULT_ALPHABET: &str = "0123456789abcdefghijklmnopqrstuvwxyz";
 
 impl FFX {
+    fn new_cipher(
+        opt_algo: Option<&openssl::cipher::CipherRef>,
+        opt_key: Option<&[u8]>,
+    ) -> Result<openssl::cipher_ctx::CipherCtx> {
+        match openssl::cipher_ctx::CipherCtx::new() {
+            Err(e) => Err(Error::new(&e.to_string())),
+            Ok(mut c) => {
+                static IV: [u8; 16] = [0; 16];
+                match c.encrypt_init(opt_algo, opt_key, Some(&IV)) {
+                    Err(e) => Err(Error::new(&e.to_string())),
+                    Ok(_) => {
+                        c.set_padding(false);
+                        Ok(c)
+                    }
+                }
+            }
+        }
+    }
+
     pub fn new(
         key: &[u8],
         opt_twk: Option<&[u8]>,
@@ -82,23 +103,12 @@ impl FFX {
             _ => return Err(Error::new("invalid key size")),
         }
 
-        let cipher: openssl::cipher_ctx::CipherCtx;
-        match openssl::cipher_ctx::CipherCtx::new() {
-            Err(e) => return Err(Error::new(&e.to_string())),
-            Ok(mut c) => {
-                static IV: [u8; 16] = [0; 16];
-                match c.encrypt_init(Some(algo), Some(key), Some(&IV)) {
-                    Err(e) => return Err(Error::new(&e.to_string())),
-                    Ok(_) => {
-                        c.set_padding(false);
-                        cipher = c;
-                    }
-                }
-            }
-        }
+        let _ = Self::new_cipher(Some(algo), Some(key))?;
 
         Ok(FFX {
-            cipher: cipher,
+            algo: algo,
+            key: key.to_vec(),
+
             twk: twk,
 
             len: FFXSizeLimits {
@@ -146,7 +156,8 @@ impl FFX {
     }
 
     pub fn prf(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
-        let blksz = self.cipher.block_size();
+        let mut c = Self::new_cipher(Some(&self.algo), Some(&self.key))?;
+        let blksz = c.block_size();
 
         if s.len() % blksz != 0 {
             return Err(Error::new(
@@ -160,9 +171,6 @@ impl FFX {
                 blksz
             )));
         }
-
-        let mut c = openssl::cipher_ctx::CipherCtx::new()?;
-        c.copy(&self.cipher)?;
 
         unsafe {
             for i in 0..(s.len() / blksz) {
