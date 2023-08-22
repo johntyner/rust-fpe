@@ -93,8 +93,8 @@ impl FF1 {
             Q[0..T.len()].copy_from_slice(T);
         }
 
-        nA = ffx::chars_to_big_num(&X[..u], alpha)?;
-        nB = ffx::chars_to_big_num(&X[u..], alpha)?;
+        nA = ffx::chars_to_bignum(&X[..u], alpha)?;
+        nB = ffx::chars_to_bignum(&X[u..], alpha)?;
 
         y.clear();
         y.add_word(radix as u32)?;
@@ -161,8 +161,8 @@ impl FF1 {
         }
 
         Ok([
-            ffx::big_num_to_chars(nA, alpha, Some(u))?,
-            ffx::big_num_to_chars(nB, alpha, Some(v))?,
+            ffx::bignum_to_chars(nA, alpha, Some(u))?,
+            ffx::bignum_to_chars(nB, alpha, Some(v))?,
         ]
         .concat())
     }

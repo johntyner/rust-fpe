@@ -176,7 +176,7 @@ impl FFX {
     }
 }
 
-pub fn chars_to_big_num(
+pub fn chars_to_bignum(
     chars: &[char],
     alpha: &[char],
 ) -> Result<openssl::bn::BigNum> {
@@ -210,7 +210,7 @@ pub fn chars_to_big_num(
     Ok(n)
 }
 
-pub fn big_num_to_chars(
+pub fn bignum_to_chars(
     mut n: openssl::bn::BigNum,
     alpha: &[char],
     opt_len: Option<usize>,
@@ -271,10 +271,10 @@ mod tests {
         let n_str = "9037450980398204379409345039453045723049";
         let n = openssl::bn::BigNum::from_dec_str(n_str)?;
 
-        let c = super::big_num_to_chars(n.to_owned()?, &alpha, None)?;
+        let c = super::bignum_to_chars(n.to_owned()?, &alpha, None)?;
         assert!(String::from_iter(c.clone()) == n_str);
 
-        let r = super::chars_to_big_num(&c, &alpha)?;
+        let r = super::chars_to_bignum(&c, &alpha)?;
         assert!(n == r);
 
         Ok(())
