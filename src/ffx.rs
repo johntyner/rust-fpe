@@ -1,7 +1,7 @@
+use crate::aes;
+use crate::alphabet;
 use crate::error::Error;
 use crate::result::Result;
-
-use crate::aes;
 
 pub enum CipherType {
     Encrypt,
@@ -20,10 +20,9 @@ struct FFXSizeLimits {
 
 pub struct FFX {
     cipher: aes::Cipher,
-
     twk: Vec<u8>,
     len: FFXSizeLimits,
-    alpha: Vec<char>,
+    alpha: alphabet::Alphabet,
 }
 
 const DEFAULT_ALPHABET: &str = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -38,19 +37,20 @@ impl FFX {
         radix: usize,
         opt_alpha: Option<&str>,
     ) -> Result<Self> {
-        let alpha: &str;
-        if opt_alpha.is_some() {
-            alpha = opt_alpha.as_ref().unwrap();
-        } else {
-            alpha = DEFAULT_ALPHABET;
-        }
-
-        let mut chars = Vec::<char>::new();
-        alpha.chars().for_each(|c| chars.push(c));
-        if radix < 2 || radix > chars.len() {
+        if radix < 2 {
             return Err(Error::new("invalid radix"));
         }
-        chars.truncate(radix);
+
+        let mut alpha = alphabet::Alphabet::new(match opt_alpha {
+            Some(s) => s,
+            None => DEFAULT_ALPHABET,
+        });
+
+        if radix > alpha.len() {
+            return Err(Error::new("radix too large for alphabet"));
+        }
+
+        alpha.truncate(radix);
 
         let mintxt = (6f64 / (radix as f64).log10()).ceil() as usize;
         if mintxt < 2 || mintxt > maxtxt {
@@ -91,7 +91,7 @@ impl FFX {
                 },
             },
 
-            alpha: chars,
+            alpha: alpha,
         })
     }
 
@@ -147,12 +147,8 @@ impl FFX {
         let radix = self.alpha.len();
         let mut digits = Vec::<u8>::with_capacity(chars.len());
 
-        for i in 0..chars.len() {
-            for j in 0..radix {
-                if chars[i] == self.alpha[j] {
-                    digits.push(j as u8);
-                }
-            }
+        for c in chars {
+            digits.push(self.alpha.ltr(*c)? as u8);
         }
 
         Ok(num_bigint::BigInt::from_radix_be(
@@ -171,15 +167,15 @@ impl FFX {
         let (_, digits) = n.to_radix_le(self.alpha.len() as u32);
         let mut chars = Vec::<char>::with_capacity(digits.len());
 
-        for i in 0..digits.len() {
-            chars.push(self.alpha[digits[i] as usize]);
+        for d in digits {
+            chars.push(self.alpha.pos(d as usize)?);
         }
 
         match opt_len {
             None => (),
-            Some(l) => {
-                while chars.len() < l {
-                    chars.push(self.alpha[0]);
+            Some(len) => {
+                if chars.len() < len {
+                    chars.resize(len, self.alpha.pos(0)?);
                 }
             }
         }
