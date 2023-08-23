@@ -120,9 +120,15 @@ impl Drop for Cipher {
     fn drop(&mut self) {
         unsafe {
             match self.typ {
-                AesType::Aes128Cbc => drop(&mut self.aes.aes128cbc),
-                AesType::Aes192Cbc => drop(&mut self.aes.aes192cbc),
-                AesType::Aes256Cbc => drop(&mut self.aes.aes256cbc),
+                AesType::Aes128Cbc => {
+                    std::mem::ManuallyDrop::drop(&mut self.aes.aes128cbc)
+                }
+                AesType::Aes192Cbc => {
+                    std::mem::ManuallyDrop::drop(&mut self.aes.aes192cbc)
+                }
+                AesType::Aes256Cbc => {
+                    std::mem::ManuallyDrop::drop(&mut self.aes.aes256cbc)
+                }
             }
         }
     }
