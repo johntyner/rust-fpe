@@ -237,6 +237,8 @@ mod tests {
 
         let n_str = "9037450980398204379409345039453045723049";
         let n = num_bigint::BigInt::from_str(n_str).unwrap();
+        let s = n.to_str_radix(10);
+        assert!(s == n_str);
 
         let c = super::bignum_to_chars(&n, &alpha, None)?;
         assert!(String::from_iter(c.clone()) == n_str);
