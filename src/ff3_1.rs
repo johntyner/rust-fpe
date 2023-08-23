@@ -40,9 +40,7 @@ impl FF3_1 {
         which: ffx::CipherType,
     ) -> Result<Vec<char>> {
         let ffx = &self.ffx;
-
-        let alpha = ffx.get_alphabet();
-        let radix = alpha.len();
+        let radix = ffx.get_radix();
 
         let n = X.len();
         ffx.validate_text_length(n)?;
@@ -74,8 +72,8 @@ impl FF3_1 {
         A.reverse();
         B.reverse();
 
-        let mut nA = ffx::chars_to_bignum(&A, &alpha)?;
-        let mut nB = ffx::chars_to_bignum(&B, &alpha)?;
+        let mut nA = ffx.chars_to_bignum(&A)?;
+        let mut nB = ffx.chars_to_bignum(&B)?;
 
         if let ffx::CipherType::Decrypt = which {
             std::mem::swap(&mut nA, &mut nB);
@@ -124,9 +122,10 @@ impl FF3_1 {
             std::mem::swap(&mut nA, &mut nB);
         }
 
-        B = ffx::bignum_to_chars(&nB, &alpha, Some(v))?;
+        B = ffx.bignum_to_chars(&nB, Some(v))?;
+        A = ffx.bignum_to_chars(&nA, Some(u))?;
+
         B.reverse();
-        A = ffx::bignum_to_chars(&nA, &alpha, Some(u))?;
         A.reverse();
 
         Ok([A, B].concat())

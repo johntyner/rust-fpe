@@ -39,9 +39,7 @@ impl FF1 {
         which: ffx::CipherType,
     ) -> Result<Vec<char>> {
         let ffx = &self.ffx;
-
-        let alpha = ffx.get_alphabet();
-        let radix = alpha.len();
+        let radix = ffx.get_radix();
 
         let n = X.len();
         let u = n / 2;
@@ -77,8 +75,8 @@ impl FF1 {
             Q[0..T.len()].copy_from_slice(T);
         }
 
-        let mut nA = ffx::chars_to_bignum(&X[..u], alpha)?;
-        let mut nB = ffx::chars_to_bignum(&X[u..], alpha)?;
+        let mut nA = ffx.chars_to_bignum(&X[..u])?;
+        let mut nB = ffx.chars_to_bignum(&X[u..])?;
 
         let mut mU: num_bigint::BigInt = radix.into();
         mU = mU.pow(u as u32);
@@ -142,8 +140,8 @@ impl FF1 {
         }
 
         Ok([
-            ffx::bignum_to_chars(&nA, alpha, Some(u))?,
-            ffx::bignum_to_chars(&nB, alpha, Some(v))?,
+            ffx.bignum_to_chars(&nA, Some(u))?,
+            ffx.bignum_to_chars(&nB, Some(v))?,
         ]
         .concat())
     }

@@ -102,8 +102,8 @@ impl FFX {
         }
     }
 
-    pub fn get_alphabet<'a>(&'a self) -> &'a Vec<char> {
-        &self.alpha
+    pub fn get_radix(&self) -> usize {
+        self.alpha.len()
     }
 
     pub fn validate_text_length(&self, n: usize) -> Result<()> {
@@ -128,19 +128,6 @@ impl FFX {
         let mut c = self.cipher.clone();
         let blksz = c.block_size();
 
-        if s.len() % blksz != 0 {
-            return Err(Error::new(
-                "source length is not a multiple of block size",
-            ));
-        }
-
-        if d.len() < blksz {
-            return Err(Error::new(&format!(
-                "destination buffer must be at least {} bytes",
-                blksz
-            )));
-        }
-
         for i in 0..(s.len() / blksz) {
             let j = i * blksz;
             c.encrypt_block(&s[j..(j + blksz)], d);
@@ -152,54 +139,54 @@ impl FFX {
     pub fn ciph(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
         self.prf(d, &s[0..16])
     }
-}
 
-pub fn chars_to_bignum(
-    chars: &[char],
-    alpha: &[char],
-) -> Result<num_bigint::BigInt> {
-    let radix = alpha.len();
-    let mut digits = Vec::<u8>::with_capacity(chars.len());
+    pub fn chars_to_bignum(
+        &self,
+        chars: &[char],
+    ) -> Result<num_bigint::BigInt> {
+        let radix = self.alpha.len();
+        let mut digits = Vec::<u8>::with_capacity(chars.len());
 
-    for i in 0..chars.len() {
-        for j in 0..radix {
-            if chars[i] == alpha[j] {
-                digits.push(j as u8);
+        for i in 0..chars.len() {
+            for j in 0..radix {
+                if chars[i] == self.alpha[j] {
+                    digits.push(j as u8);
+                }
             }
         }
+
+        Ok(num_bigint::BigInt::from_radix_be(
+            num_bigint::Sign::Plus,
+            &digits,
+            radix as u32,
+        )
+        .unwrap())
     }
 
-    Ok(num_bigint::BigInt::from_radix_be(
-        num_bigint::Sign::Plus,
-        &digits,
-        radix as u32,
-    )
-    .unwrap())
-}
+    pub fn bignum_to_chars(
+        &self,
+        n: &num_bigint::BigInt,
+        opt_len: Option<usize>,
+    ) -> Result<Vec<char>> {
+        let (_, digits) = n.to_radix_le(self.alpha.len() as u32);
+        let mut chars = Vec::<char>::with_capacity(digits.len());
 
-pub fn bignum_to_chars(
-    n: &num_bigint::BigInt,
-    alpha: &[char],
-    opt_len: Option<usize>,
-) -> Result<Vec<char>> {
-    let (_, digits) = n.to_radix_le(alpha.len() as u32);
-    let mut chars = Vec::<char>::with_capacity(digits.len());
+        for i in 0..digits.len() {
+            chars.push(self.alpha[digits[i] as usize]);
+        }
 
-    for i in 0..digits.len() {
-        chars.push(alpha[digits[i] as usize]);
-    }
-
-    match opt_len {
-        None => (),
-        Some(l) => {
-            while chars.len() < l {
-                chars.push(alpha[0]);
+        match opt_len {
+            None => (),
+            Some(l) => {
+                while chars.len() < l {
+                    chars.push(self.alpha[0]);
+                }
             }
         }
-    }
 
-    chars.reverse();
-    Ok(chars)
+        chars.reverse();
+        Ok(chars)
+    }
 }
 
 #[cfg(test)]
@@ -232,18 +219,17 @@ mod tests {
 
     #[test]
     fn test_bignum_conversion() -> Result<()> {
-        let mut alpha = Vec::<char>::new();
-        "0123456789".chars().for_each(|c| alpha.push(c));
+        let ffx = FFX::new(&[0; 16], None, 1024, 0, 0, 10, None)?;
 
         let n_str = "9037450980398204379409345039453045723049";
         let n = num_bigint::BigInt::from_str(n_str).unwrap();
         let s = n.to_str_radix(10);
         assert!(s == n_str);
 
-        let c = super::bignum_to_chars(&n, &alpha, None)?;
+        let c = ffx.bignum_to_chars(&n, None)?;
         assert!(String::from_iter(c.clone()) == n_str);
 
-        let r = super::chars_to_bignum(&c, &alpha)?;
+        let r = ffx.chars_to_bignum(&c)?;
         assert!(n == r);
 
         Ok(())
