@@ -1,15 +1,10 @@
 #![allow(non_snake_case)]
 
+use crate::ffx;
 use crate::result::Result;
 
-use crate::ffx;
-
-use std::ops::Add;
-use std::ops::Mul;
-use std::ops::Rem;
-use std::ops::Sub;
-
 use byteorder::ByteOrder;
+use num_traits::Euclid;
 
 pub struct FF1 {
     ffx: ffx::FFX,
@@ -48,12 +43,6 @@ impl FF1 {
         let alpha = ffx.get_alphabet();
         let radix = alpha.len();
 
-        let mut nA: openssl::bn::BigNum;
-        let mut nB: openssl::bn::BigNum;
-        let mut mU = openssl::bn::BigNum::new()?;
-        let mut mV = openssl::bn::BigNum::new()?;
-        let mut y = openssl::bn::BigNum::new()?;
-
         let n = X.len();
         let u = n / 2;
         let v = n - u;
@@ -88,20 +77,14 @@ impl FF1 {
             Q[0..T.len()].copy_from_slice(T);
         }
 
-        nA = ffx::chars_to_bignum(&X[..u], alpha)?;
-        nB = ffx::chars_to_bignum(&X[u..], alpha)?;
+        let mut nA = ffx::chars_to_bignum(&X[..u], alpha)?;
+        let mut nB = ffx::chars_to_bignum(&X[u..], alpha)?;
 
-        y.clear();
-        y.add_word(radix as u32)?;
-        mV.clear();
-        mV.add_word(u as u32)?;
-        {
-            let mut bn = openssl::bn::BigNumContext::new()?;
-            mU.exp(&y, &mV, &mut bn)?;
-        }
-        mV = mU.to_owned()?;
+        let mut mU: num_bigint::BigInt = radix.into();
+        mU = mU.pow(u as u32);
+        let mut mV = mU.clone();
         if u != v {
-            mV = mV.mul(&y);
+            mV *= radix;
         }
 
         if let ffx::CipherType::Decrypt = which {
@@ -119,7 +102,10 @@ impl FF1 {
                     ffx::CipherType::Decrypt => Q[Q.len() - b - 1] = 10 - i,
                 }
 
-                Q[Q_len - b..].copy_from_slice(&nB.to_vec_padded(b as i32)?);
+                let (_, mut v) = nB.to_bytes_le();
+                v.resize(b, 0);
+                v.reverse();
+                Q[Q_len - b..].copy_from_slice(&v);
             }
 
             ffx.prf(&mut R[..16], &P)?;
@@ -134,18 +120,20 @@ impl FF1 {
                 byteorder::BigEndian::write_u32(&mut s[12..16], w);
             }
 
-            y.copy_from_slice(&R[..d])?;
+            let y = num_bigint::BigInt::from_bytes_be(
+                num_bigint::Sign::Plus,
+                &R[..d],
+            );
+
             match which {
-                ffx::CipherType::Encrypt => nA = nA.add(&y),
-                ffx::CipherType::Decrypt => nA = nA.sub(&y),
+                ffx::CipherType::Encrypt => nA += y,
+                ffx::CipherType::Decrypt => nA -= y,
             }
 
             std::mem::swap(&mut nA, &mut nB);
 
-            nB = nB.rem(&mU);
-            if nB.is_negative() {
-                nB = nB.add(&mU);
-            }
+            nB = nB.rem_euclid(&mU);
+
             std::mem::swap(&mut mU, &mut mV);
         }
 
@@ -154,8 +142,8 @@ impl FF1 {
         }
 
         Ok([
-            ffx::bignum_to_chars(nA, alpha, Some(u))?,
-            ffx::bignum_to_chars(nB, alpha, Some(v))?,
+            ffx::bignum_to_chars(&nA, alpha, Some(u))?,
+            ffx::bignum_to_chars(&nB, alpha, Some(v))?,
         ]
         .concat())
     }

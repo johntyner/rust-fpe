@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::result::Result;
 
-use std::ops::Add;
+use crate::aes;
 
 pub enum CipherType {
     Encrypt,
@@ -19,8 +19,7 @@ struct FFXSizeLimits {
 }
 
 pub struct FFX {
-    algo: &'static openssl::cipher::CipherRef,
-    key: Vec<u8>,
+    cipher: aes::Cipher,
 
     twk: Vec<u8>,
     len: FFXSizeLimits,
@@ -30,25 +29,6 @@ pub struct FFX {
 const DEFAULT_ALPHABET: &str = "0123456789abcdefghijklmnopqrstuvwxyz";
 
 impl FFX {
-    fn new_cipher(
-        opt_algo: Option<&openssl::cipher::CipherRef>,
-        opt_key: Option<&[u8]>,
-    ) -> Result<openssl::cipher_ctx::CipherCtx> {
-        match openssl::cipher_ctx::CipherCtx::new() {
-            Err(e) => Err(Error::new(&e.to_string())),
-            Ok(mut c) => {
-                static IV: [u8; 16] = [0; 16];
-                match c.encrypt_init(opt_algo, opt_key, Some(&IV)) {
-                    Err(e) => Err(Error::new(&e.to_string())),
-                    Ok(_) => {
-                        c.set_padding(false);
-                        Ok(c)
-                    }
-                }
-            }
-        }
-    }
-
     pub fn new(
         key: &[u8],
         opt_twk: Option<&[u8]>,
@@ -95,19 +75,8 @@ impl FFX {
             }
         }
 
-        let algo: &openssl::cipher::CipherRef;
-        match key.len() {
-            16 => algo = openssl::cipher::Cipher::aes_128_cbc(),
-            24 => algo = openssl::cipher::Cipher::aes_192_cbc(),
-            32 => algo = openssl::cipher::Cipher::aes_256_cbc(),
-            _ => return Err(Error::new("invalid key size")),
-        }
-
-        let _ = Self::new_cipher(Some(algo), Some(key))?;
-
         Ok(FFX {
-            algo: algo,
-            key: key.to_vec(),
+            cipher: aes::Cipher::new(key)?,
 
             twk: twk,
 
@@ -156,7 +125,7 @@ impl FFX {
     }
 
     pub fn prf(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
-        let mut c = Self::new_cipher(Some(&self.algo), Some(&self.key))?;
+        let mut c = self.cipher.clone();
         let blksz = c.block_size();
 
         if s.len() % blksz != 0 {
@@ -172,13 +141,9 @@ impl FFX {
             )));
         }
 
-        unsafe {
-            for i in 0..(s.len() / blksz) {
-                let j = i * blksz;
-                c.cipher_update_unchecked(&s[j..(j + blksz)], Some(d))?;
-            }
-
-            c.cipher_final_unchecked(d)?;
+        for i in 0..(s.len() / blksz) {
+            let j = i * blksz;
+            c.encrypt_block(&s[j..(j + blksz)], d);
         }
 
         Ok(())
@@ -192,49 +157,36 @@ impl FFX {
 pub fn chars_to_bignum(
     chars: &[char],
     alpha: &[char],
-) -> Result<openssl::bn::BigNum> {
-    let chars_len = chars.len();
+) -> Result<num_bigint::BigInt> {
     let radix = alpha.len();
+    let mut digits = Vec::<u8>::with_capacity(chars.len());
 
-    let mut n = openssl::bn::BigNum::from_u32(0)?;
-    let mut m = openssl::bn::BigNum::from_u32(1)?;
-
-    for i in (0..chars_len).rev() {
-        let mut idx = radix;
-
+    for i in 0..chars.len() {
         for j in 0..radix {
             if chars[i] == alpha[j] {
-                idx = j;
-                break;
+                digits.push(j as u8);
             }
         }
-
-        if idx >= radix {
-            return Err(Error::new("invalid character encountered"));
-        } else if idx > 0 {
-            let mut t = m.to_owned()?;
-            t.mul_word(idx as u32)?;
-            n = n.add(&t);
-        }
-
-        m.mul_word(radix as u32)?;
     }
 
-    Ok(n)
+    Ok(num_bigint::BigInt::from_radix_be(
+        num_bigint::Sign::Plus,
+        &digits,
+        radix as u32,
+    )
+    .unwrap())
 }
 
 pub fn bignum_to_chars(
-    mut n: openssl::bn::BigNum,
+    n: &num_bigint::BigInt,
     alpha: &[char],
     opt_len: Option<usize>,
 ) -> Result<Vec<char>> {
-    let z = openssl::bn::BigNum::from_u32(0)?;
+    let (_, digits) = n.to_radix_le(alpha.len() as u32);
+    let mut chars = Vec::<char>::with_capacity(digits.len());
 
-    let mut chars = Vec::<char>::new();
-
-    while n.ne(&z) {
-        let r = n.div_word(alpha.len() as u32)?;
-        chars.push(alpha[r as usize]);
+    for i in 0..digits.len() {
+        chars.push(alpha[digits[i] as usize]);
     }
 
     match opt_len {
@@ -254,6 +206,8 @@ pub fn bignum_to_chars(
 mod tests {
     use super::FFX;
     use crate::result::Result;
+
+    use std::str::FromStr;
 
     #[test]
     fn test_cipher_reuse() -> Result<()> {
@@ -282,9 +236,11 @@ mod tests {
         "0123456789".chars().for_each(|c| alpha.push(c));
 
         let n_str = "9037450980398204379409345039453045723049";
-        let n = openssl::bn::BigNum::from_dec_str(n_str)?;
+        let n = num_bigint::BigInt::from_str(n_str).unwrap();
+        let s = n.to_str_radix(10);
+        assert!(s == n_str);
 
-        let c = super::bignum_to_chars(n.to_owned()?, &alpha, None)?;
+        let c = super::bignum_to_chars(&n, &alpha, None)?;
         assert!(String::from_iter(c.clone()) == n_str);
 
         let r = super::chars_to_bignum(&c, &alpha)?;
