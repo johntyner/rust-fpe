@@ -3,8 +3,6 @@ use crate::result::Result;
 
 use crate::aes;
 
-use std::ops::Add;
-
 pub enum CipherType {
     Encrypt,
     Decrypt,
@@ -159,49 +157,36 @@ impl FFX {
 pub fn chars_to_bignum(
     chars: &[char],
     alpha: &[char],
-) -> Result<openssl::bn::BigNum> {
-    let chars_len = chars.len();
+) -> Result<num_bigint::BigInt> {
     let radix = alpha.len();
+    let mut digits = Vec::<u8>::with_capacity(chars.len());
 
-    let mut n = openssl::bn::BigNum::from_u32(0)?;
-    let mut m = openssl::bn::BigNum::from_u32(1)?;
-
-    for i in (0..chars_len).rev() {
-        let mut idx = radix;
-
+    for i in 0..chars.len() {
         for j in 0..radix {
             if chars[i] == alpha[j] {
-                idx = j;
-                break;
+                digits.push(j as u8);
             }
         }
-
-        if idx >= radix {
-            return Err(Error::new("invalid character encountered"));
-        } else if idx > 0 {
-            let mut t = m.to_owned()?;
-            t.mul_word(idx as u32)?;
-            n = n.add(&t);
-        }
-
-        m.mul_word(radix as u32)?;
     }
 
-    Ok(n)
+    Ok(num_bigint::BigInt::from_radix_be(
+        num_bigint::Sign::Plus,
+        &digits,
+        radix as u32,
+    )
+    .unwrap())
 }
 
 pub fn bignum_to_chars(
-    mut n: openssl::bn::BigNum,
+    n: &num_bigint::BigInt,
     alpha: &[char],
     opt_len: Option<usize>,
 ) -> Result<Vec<char>> {
-    let z = openssl::bn::BigNum::from_u32(0)?;
+    let (_, digits) = n.to_radix_le(alpha.len() as u32);
+    let mut chars = Vec::<char>::with_capacity(digits.len());
 
-    let mut chars = Vec::<char>::new();
-
-    while n.ne(&z) {
-        let r = n.div_word(alpha.len() as u32)?;
-        chars.push(alpha[r as usize]);
+    for i in 0..digits.len() {
+        chars.push(alpha[digits[i] as usize]);
     }
 
     match opt_len {
@@ -221,6 +206,8 @@ pub fn bignum_to_chars(
 mod tests {
     use super::FFX;
     use crate::result::Result;
+
+    use std::str::FromStr;
 
     #[test]
     fn test_cipher_reuse() -> Result<()> {
@@ -249,9 +236,9 @@ mod tests {
         "0123456789".chars().for_each(|c| alpha.push(c));
 
         let n_str = "9037450980398204379409345039453045723049";
-        let n = openssl::bn::BigNum::from_dec_str(n_str)?;
+        let n = num_bigint::BigInt::from_str(n_str).unwrap();
 
-        let c = super::bignum_to_chars(n.to_owned()?, &alpha, None)?;
+        let c = super::bignum_to_chars(&n, &alpha, None)?;
         assert!(String::from_iter(c.clone()) == n_str);
 
         let r = super::chars_to_bignum(&c, &alpha)?;

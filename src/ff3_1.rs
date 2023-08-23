@@ -1,13 +1,9 @@
 #![allow(non_snake_case)]
 
+use crate::ffx;
 use crate::result::Result;
 
-use crate::ffx;
-
-use std::ops::Add;
-use std::ops::Mul;
-use std::ops::Rem;
-use std::ops::Sub;
+use num_traits::Euclid;
 
 pub struct FF3_1 {
     ffx: ffx::FFX,
@@ -48,12 +44,6 @@ impl FF3_1 {
         let alpha = ffx.get_alphabet();
         let radix = alpha.len();
 
-        let mut nA: openssl::bn::BigNum;
-        let mut nB: openssl::bn::BigNum;
-        let mut mU = openssl::bn::BigNum::new()?;
-        let mut mV = openssl::bn::BigNum::new()?;
-        let mut y = openssl::bn::BigNum::new()?;
-
         let n = X.len();
         ffx.validate_text_length(n)?;
 
@@ -71,26 +61,21 @@ impl FF3_1 {
         Tw[1][..3].copy_from_slice(&T[4..]);
         Tw[1][3] = (T[3] & 0x0f) << 4;
 
-        y.clear();
-        y.add_word(radix as u32)?;
-        mU.clear();
-        mU.add_word(v as u32)?;
-        {
-            let mut bn = openssl::bn::BigNumContext::new()?;
-            mV.exp(&y, &mU, &mut bn)?;
-        }
-        mU = mV.to_owned()?;
+        let mut mV: num_bigint::BigInt = radix.into();
+        mV = mV.pow(v as u32);
+        let mut mU = mV.clone();
         if v != u {
-            mU = mU.mul(&y);
+            mU *= radix;
         }
 
         let mut A = X[..u].to_vec();
         let mut B = X[u..].to_vec();
 
         A.reverse();
-        nA = ffx::chars_to_bignum(&A, &alpha)?;
         B.reverse();
-        nB = ffx::chars_to_bignum(&B, &alpha)?;
+
+        let mut nA = ffx::chars_to_bignum(&A, &alpha)?;
+        let mut nB = ffx::chars_to_bignum(&B, &alpha)?;
 
         if let ffx::CipherType::Decrypt = which {
             std::mem::swap(&mut nA, &mut nB);
@@ -106,7 +91,11 @@ impl FF3_1 {
                 ffx::CipherType::Encrypt => P[0][3] ^= i - 1,
                 ffx::CipherType::Decrypt => P[0][3] ^= 8 - i,
             }
-            P[0][4..16].copy_from_slice(&nB.to_vec_padded(12)?);
+
+            let (_, mut v) = nB.to_bytes_le();
+            v.resize(12, 0);
+            v.reverse();
+            P[0][4..16].copy_from_slice(&v);
 
             P[0].reverse();
             {
@@ -115,18 +104,18 @@ impl FF3_1 {
             }
             P[1].reverse();
 
-            y.copy_from_slice(&P[1])?;
+            let y = num_bigint::BigInt::from_bytes_be(
+                num_bigint::Sign::Plus,
+                &P[1],
+            );
             match which {
-                ffx::CipherType::Encrypt => nA = nA.add(&y),
-                ffx::CipherType::Decrypt => nA = nA.sub(&y),
+                ffx::CipherType::Encrypt => nA += y,
+                ffx::CipherType::Decrypt => nA -= y,
             }
 
             std::mem::swap(&mut nA, &mut nB);
 
-            nB = nB.rem(&mU);
-            if nB.is_negative() {
-                nB = nB.add(&mU);
-            }
+            nB = nB.rem_euclid(&mU);
 
             std::mem::swap(&mut mU, &mut mV);
         }
@@ -135,9 +124,9 @@ impl FF3_1 {
             std::mem::swap(&mut nA, &mut nB);
         }
 
-        B = ffx::bignum_to_chars(nB, &alpha, Some(v))?;
+        B = ffx::bignum_to_chars(&nB, &alpha, Some(v))?;
         B.reverse();
-        A = ffx::bignum_to_chars(nA, &alpha, Some(u))?;
+        A = ffx::bignum_to_chars(&nA, &alpha, Some(u))?;
         A.reverse();
 
         Ok([A, B].concat())

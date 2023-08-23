@@ -17,12 +17,6 @@ pub mod error {
             }
         }
     }
-
-    impl From<openssl::error::ErrorStack> for Error {
-        fn from(e: openssl::error::ErrorStack) -> Self {
-            Error::new(&e.to_string())
-        }
-    }
 }
 
 pub mod result {

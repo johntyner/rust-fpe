@@ -6,10 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-openssl = "0.10.56"
 byteorder = "1.4.3"
 aes = "0.8.3"
 cbc = "0.1.2"
+num-bigint = "0.4.4"
+num-traits = "0.2.16"
 
 [dev-dependencies]
 bencher = "0.1.5"
