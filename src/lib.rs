@@ -1,3 +1,4 @@
+pub(crate) mod aes;
 pub mod ff1;
 pub mod ff3_1;
 pub(crate) mod ffx;

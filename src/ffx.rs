@@ -1,6 +1,8 @@
 use crate::error::Error;
 use crate::result::Result;
 
+use crate::aes;
+
 use std::ops::Add;
 
 pub enum CipherType {
@@ -19,8 +21,7 @@ struct FFXSizeLimits {
 }
 
 pub struct FFX {
-    algo: &'static openssl::cipher::CipherRef,
-    key: Vec<u8>,
+    cipher: aes::Cipher,
 
     twk: Vec<u8>,
     len: FFXSizeLimits,
@@ -30,25 +31,6 @@ pub struct FFX {
 const DEFAULT_ALPHABET: &str = "0123456789abcdefghijklmnopqrstuvwxyz";
 
 impl FFX {
-    fn new_cipher(
-        opt_algo: Option<&openssl::cipher::CipherRef>,
-        opt_key: Option<&[u8]>,
-    ) -> Result<openssl::cipher_ctx::CipherCtx> {
-        match openssl::cipher_ctx::CipherCtx::new() {
-            Err(e) => Err(Error::new(&e.to_string())),
-            Ok(mut c) => {
-                static IV: [u8; 16] = [0; 16];
-                match c.encrypt_init(opt_algo, opt_key, Some(&IV)) {
-                    Err(e) => Err(Error::new(&e.to_string())),
-                    Ok(_) => {
-                        c.set_padding(false);
-                        Ok(c)
-                    }
-                }
-            }
-        }
-    }
-
     pub fn new(
         key: &[u8],
         opt_twk: Option<&[u8]>,
@@ -95,19 +77,8 @@ impl FFX {
             }
         }
 
-        let algo: &openssl::cipher::CipherRef;
-        match key.len() {
-            16 => algo = openssl::cipher::Cipher::aes_128_cbc(),
-            24 => algo = openssl::cipher::Cipher::aes_192_cbc(),
-            32 => algo = openssl::cipher::Cipher::aes_256_cbc(),
-            _ => return Err(Error::new("invalid key size")),
-        }
-
-        let _ = Self::new_cipher(Some(algo), Some(key))?;
-
         Ok(FFX {
-            algo: algo,
-            key: key.to_vec(),
+            cipher: aes::Cipher::new(key)?,
 
             twk: twk,
 
@@ -156,7 +127,7 @@ impl FFX {
     }
 
     pub fn prf(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
-        let mut c = Self::new_cipher(Some(&self.algo), Some(&self.key))?;
+        let mut c = self.cipher.clone();
         let blksz = c.block_size();
 
         if s.len() % blksz != 0 {
@@ -172,13 +143,9 @@ impl FFX {
             )));
         }
 
-        unsafe {
-            for i in 0..(s.len() / blksz) {
-                let j = i * blksz;
-                c.cipher_update_unchecked(&s[j..(j + blksz)], Some(d))?;
-            }
-
-            c.cipher_final_unchecked(d)?;
+        for i in 0..(s.len() / blksz) {
+            let j = i * blksz;
+            c.encrypt_block(&s[j..(j + blksz)], d);
         }
 
         Ok(())
