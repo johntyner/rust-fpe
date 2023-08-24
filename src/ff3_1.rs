@@ -98,7 +98,7 @@ impl FF3_1 {
             P[0].reverse();
             {
                 let (P0, P1) = P.split_at_mut(1);
-                ffx.ciph(&mut P1[0], &P0[0])?;
+                ffx.ciph(&P0[0], &mut P1[0])?;
             }
             P[1].reverse();
 

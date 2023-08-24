@@ -181,7 +181,7 @@ impl FF1 {
             }
 
             // (step 6ii)
-            ffx.prf(&mut r[..blksz], &p)?;
+            ffx.prf(&p, &mut r[..blksz])?;
 
             // (step 6iii)
             // this step is a little bit tricky, or at least the way
@@ -211,7 +211,7 @@ impl FF1 {
                     &mut s[(blksz - 4)..(blksz)],
                     w ^ j as u32,
                 );
-                ffx.ciph(&mut d[l..l + blksz], s)?;
+                ffx.ciph(s, &mut d[l..l + blksz])?;
                 byteorder::BigEndian::write_u32(
                     &mut s[(blksz - 4)..(blksz)],
                     w,

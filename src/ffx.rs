@@ -124,7 +124,7 @@ impl FFX {
         Ok(())
     }
 
-    pub fn prf(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
+    pub fn prf(&self, s: &[u8], d: &mut [u8]) -> Result<()> {
         let mut c = self.cipher.clone();
         let blksz = c.block_size();
 
@@ -136,8 +136,8 @@ impl FFX {
         Ok(())
     }
 
-    pub fn ciph(&self, d: &mut [u8], s: &[u8]) -> Result<()> {
-        self.prf(d, &s[0..16])
+    pub fn ciph(&self, s: &[u8], d: &mut [u8]) -> Result<()> {
+        self.prf(&s[0..16], d)
     }
 
     pub fn chars_to_bignum(
@@ -204,8 +204,8 @@ mod tests {
         let mut d2: [u8; 16] = [0; 16];
         let s: [u8; 16] = [0; 16];
 
-        ffx.ciph(&mut d1, &s)?;
-        ffx.ciph(&mut d2, &s)?;
+        ffx.ciph(&s, &mut d1)?;
+        ffx.ciph(&s, &mut d2)?;
 
         assert!(d1 == d2);
         assert!(d1 == exp);
