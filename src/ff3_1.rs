@@ -1,30 +1,81 @@
-#![allow(non_snake_case)]
+//! The FF3-1 algorithm
+//!
+//! The FF3-1 algorithm supports key sizes of 128, 192, and 256 bits.
+//! The (maximum possible) length of the tweak is supplied by the
+//! caller and is essentially unbounded.
+//!
+//! This implementation contains a "context" structure, called FF3_1,
+//! that holds the encryption key, the default tweak, and some other
+//! parameters related to the algorithm. Once, this structure has
+//! been created, it can be used to encrypt and decrypt data
+//!
+//! # Example
+//! ```rust
+//! let ff3_1 = fpe::ff3_1::FF3_1::new(
+//!     &[
+//!         0xad, 0x41, 0xec, 0x5d, 0x23, 0x56, 0xde, 0xae,
+//!         0x53, 0xae, 0x76, 0xf5, 0x0b, 0x4b, 0xa6, 0xd2,
+//!     ],    // the encryption key
+//!     // the default tweak
+//!     Some(&[0xcf, 0x29, 0xda, 0x1e, 0x18, 0xd9, 0x70]),
+//!     10,   // radix specifies the number of characters in the alphabet
+//!     None  // use (the first 10 characters of) the default alphabet
+//! ).unwrap();
+//!
+//! let pt = "6520935496";
+//! let ct = "4716569208";
+//!
+//! let out = ff3_1.encrypt(pt, None).unwrap();
+//! assert!(out == ct);
+//!
+//! let out = ff3_1.decrypt(&ct, None).unwrap();
+//! assert!(out == pt);
 
 use crate::ffx;
 use crate::result::Result;
 
 use num_traits::Euclid;
 
+/// The FF3_1 context structure
 pub struct FF3_1 {
     ffx: ffx::FFX,
 }
 
 impl FF3_1 {
+    /// Create a new FF3-1 context
+    ///
+    /// The supplied key may be any of the lengths supported by AES.
+    ///
+    /// The default tweak is optional. If supplied, it's length
+    /// must be 7 bytes as per the algorithm specification. Those values
+    /// are hardcoded within this function. Note that if the default
+    /// tweak is not supplied, one must be supplied during the encrypt
+    /// and decrypt operations
+    ///
+    /// The radix must be less than or equal to the number of characters
+    /// in the supplied alphabet (or the default alphabet) if no alphabet
+    /// is supplied to this function
     pub fn new(
         key: &[u8],
         opt_twk: Option<&[u8]>,
         radix: usize,
         opt_alpha: Option<&str>,
     ) -> Result<Self> {
+        // key is reversed for ff3-1
         let mut k = key.to_vec();
-
         k.reverse();
 
         Ok(FF3_1 {
             ffx: ffx::FFX::new(
                 &k,
                 opt_twk,
+                // maxlen for ff3-1:
+                //   = 2 * log_radix(2**96)
+                //   = 2 * log2(2**96) / log2(radix)
+                //   = 2 * 96 / log2(radix)
+                //   = 192 / log2(radix)
                 (192f64 / (radix as f64).log2()).floor() as usize,
+                // tweak size is fixed for ff3-1
                 7,
                 7,
                 radix,
@@ -33,122 +84,171 @@ impl FF3_1 {
         })
     }
 
+    // the code wants to work with individual characters or letters.
+    // this isn't possible with utf8, so the caller is expected to
+    // convert Strings to sequences of chars
     fn cipher_chars(
         &self,
-        X: &[char],
+        inp: &[char],
         opt_twk: Option<&[u8]>,
         which: ffx::CipherType,
     ) -> Result<Vec<char>> {
         let ffx = &self.ffx;
         let radix = ffx.get_radix();
 
-        let n = X.len();
+        let n = inp.len();
         ffx.validate_text_length(n)?;
 
+        // (step 1)
         let v = n / 2;
         let u = n - v;
 
-        let mut P: [[u8; 16]; 2] = [[0; 16]; 2];
+        // (step 2)
+        let mut a = inp[..u].to_vec();
+        let mut b = inp[u..].to_vec();
 
-        let T = ffx.get_tweak(&opt_twk);
-        ffx.validate_tweak_length(T.len())?;
+        let t = ffx.get_tweak(&opt_twk);
+        ffx.validate_tweak_length(t.len())?;
 
-        let mut Tw: [[u8; 4]; 2] = [[0; 4]; 2];
-        Tw[0][..3].copy_from_slice(&T[..3]);
-        Tw[0][3] = T[3] & 0xf0;
-        Tw[1][..3].copy_from_slice(&T[4..]);
-        Tw[1][3] = (T[3] & 0x0f) << 4;
+        // (step 3)
+        // tl and tr are tw[0] and tw[1]
+        let mut tw: [[u8; 4]; 2] = [[0; 4]; 2];
+        tw[0][..3].copy_from_slice(&t[..3]);
+        tw[0][3] = t[3] & 0xf0;
+        tw[1][..3].copy_from_slice(&t[4..]);
+        tw[1][3] = (t[3] & 0x0f) << 4;
 
-        let mut mV: num_bigint::BigInt = radix.into();
-        mV = mV.pow(v as u32);
-        let mut mU = mV.clone();
+        // later on radix**m where m is either u or v is needed.
+        // just calculate them both here. note that u either equals
+        // v or is one more than v. (step 4v, partial)
+        let mut mv: num_bigint::BigInt = radix.into();
+        mv = mv.pow(v as u32);
+        let mut mu = mv.clone();
         if v != u {
-            mU *= radix;
+            mu *= radix;
         }
 
-        let mut A = X[..u].to_vec();
-        let mut B = X[u..].to_vec();
+        // the algorithm calls for the strings A and B to be reversed
+        // at various points for certain operations, and it otherwise
+        // maintains them in the original form. however, if they are
+        // reversed before the algorithm starts, there is no need to
+        // reverse them *during* the algorithm. furthermore, because
+        // this implementation elides step 6vi, there is no need for
+        // reversal at all during the algorithm.
+        a.reverse();
+        b.reverse();
 
-        A.reverse();
-        B.reverse();
+        // without the need for reversal, the strings can be converted
+        // to their numerical representations for the duration of the
+        // algorithm
+        let mut na = ffx.chars_to_bignum(&a)?;
+        let mut nb = ffx.chars_to_bignum(&b)?;
 
-        let mut nA = ffx.chars_to_bignum(&A)?;
-        let mut nB = ffx.chars_to_bignum(&B)?;
-
+        // during decryption, the algorithm runs in "reverse".
+        // swap these values so that during decryption we start
+        // with the last ones used during the encryption
         if let ffx::CipherType::Decrypt = which {
-            std::mem::swap(&mut nA, &mut nB);
-            std::mem::swap(&mut mU, &mut mV);
+            std::mem::swap(&mut na, &mut nb);
+            std::mem::swap(&mut mu, &mut mv);
 
-            let (T0, T1) = Tw.split_at_mut(1);
-            std::mem::swap(&mut T0[0], &mut T1[0]);
+            let (t0, t1) = tw.split_at_mut(1);
+            std::mem::swap(&mut t0[0], &mut t1[0]);
         }
 
-        for i in 1..=8 {
-            P[0][..4].copy_from_slice(&Tw[(i as u8 % 2) as usize]);
+        for i in 0..8 {
+            let mut p: [[u8; 16]; 2] = [[0; 16]; 2];
+
+            // (step 4i, 4ii)
+            p[0][..4].copy_from_slice(&tw[((i + 1) as u8 % 2) as usize]);
             match which {
-                ffx::CipherType::Encrypt => P[0][3] ^= i - 1,
-                ffx::CipherType::Decrypt => P[0][3] ^= 8 - i,
+                ffx::CipherType::Encrypt => p[0][3] ^= i,
+                ffx::CipherType::Decrypt => p[0][3] ^= 7 - i,
             }
 
-            let (_, mut v) = nB.to_bytes_le();
+            // the num_bigint library doesn't provide left padding,
+            // but it does support little endian output which allows
+            // us to do right-padding and then reverse the bytes
+            let (_, mut v) = nb.to_bytes_le();
             v.resize(12, 0);
             v.reverse();
-            P[0][4..16].copy_from_slice(&v);
+            p[0][4..16].copy_from_slice(&v);
 
-            P[0].reverse();
+            // the ciph() operation does not support encryption in
+            // place, so the output is stored in a separate array,
+            // which is only used one, immediately after the operation
+            // (step 4iii)
+            p[0].reverse();
             {
-                let (P0, P1) = P.split_at_mut(1);
-                ffx.ciph(&P0[0], &mut P1[0])?;
+                let (p0, p1) = p.split_at_mut(1);
+                ffx.ciph(&p0[0], &mut p1[0])?;
             }
-            P[1].reverse();
+            p[1].reverse();
 
+            // (step 4iv)
             let y = num_bigint::BigInt::from_bytes_be(
                 num_bigint::Sign::Plus,
-                &P[1],
+                &p[1],
             );
+
+            // (step 4v)
             match which {
-                ffx::CipherType::Encrypt => nA += y,
-                ffx::CipherType::Decrypt => nA -= y,
+                ffx::CipherType::Encrypt => na += y,
+                ffx::CipherType::Decrypt => na -= y,
             }
+            na = na.rem_euclid(&mu);
+            // (step 4i, partial)
+            std::mem::swap(&mut mu, &mut mv);
 
-            std::mem::swap(&mut nA, &mut nB);
-
-            nB = nB.rem_euclid(&mU);
-
-            std::mem::swap(&mut mU, &mut mV);
+            // (step 4vii, 4viii; step 4vi is skipped)
+            std::mem::swap(&mut na, &mut nb);
         }
 
+        // during decryption, the halves are reversed. put em back
         if let ffx::CipherType::Decrypt = which {
-            std::mem::swap(&mut nA, &mut nB);
+            std::mem::swap(&mut na, &mut nb);
         }
 
-        B = ffx.bignum_to_chars(&nB, Some(v))?;
-        A = ffx.bignum_to_chars(&nA, Some(u))?;
+        // convert A and B back from their numerical representations
+        b = ffx.bignum_to_chars(&nb, Some(v))?;
+        a = ffx.bignum_to_chars(&na, Some(u))?;
 
-        B.reverse();
-        A.reverse();
+        // restore the ordering of the strings
+        b.reverse();
+        a.reverse();
 
-        Ok([A, B].concat())
+        // (step 5)
+        Ok([a, b].concat())
     }
 
+    // common function to convert the input String to a sequence
+    // of chars before the cipher operation and back again after
     fn cipher_string(
         &self,
-        inp: &str,
-        opt_twk: Option<&[u8]>,
+        inp_s: &str,
+        opt_t: Option<&[u8]>,
         which: ffx::CipherType,
     ) -> Result<String> {
-        let mut X = Vec::<char>::new();
-        inp.chars().for_each(|c| X.push(c));
+        let mut inp_c = Vec::<char>::new();
+        inp_s.chars().for_each(|c| inp_c.push(c));
 
-        let Y = self.cipher_chars(&X, opt_twk, which)?;
-        Ok(String::from_iter(Y))
+        let out_c = self.cipher_chars(&inp_c, opt_t, which)?;
+        Ok(String::from_iter(out_c))
     }
 
-    pub fn encrypt(&self, pt: &str, opt_twk: Option<&[u8]>) -> Result<String> {
-        self.cipher_string(pt, opt_twk, ffx::CipherType::Encrypt)
+    /// Encrypt a string
+    ///
+    /// If the tweak is not None, then the specified tweak will be used
+    /// instead of the default specified by the context structure.
+    pub fn encrypt(&self, pt: &str, twk: Option<&[u8]>) -> Result<String> {
+        self.cipher_string(pt, twk, ffx::CipherType::Encrypt)
     }
 
-    pub fn decrypt(&self, ct: &str, opt_twk: Option<&[u8]>) -> Result<String> {
-        self.cipher_string(ct, opt_twk, ffx::CipherType::Decrypt)
+    /// Decrypt a string
+    ///
+    /// If the tweak is not None, then the specified tweak will be used
+    /// instead of the default specified by the context structure. The
+    /// tweak used must match that used during encryption.
+    pub fn decrypt(&self, ct: &str, twk: Option<&[u8]>) -> Result<String> {
+        self.cipher_string(ct, twk, ffx::CipherType::Decrypt)
     }
 }
