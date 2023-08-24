@@ -84,8 +84,8 @@ impl Alphabet {
 
 #[cfg(test)]
 mod tests {
-    use crate::result::Result;
     use super::Alphabet;
+    use crate::result::Result;
 
     #[test]
     fn limited_alphabet() -> Result<()> {
@@ -97,9 +97,12 @@ mod tests {
     #[test]
     fn unlimited_alphabet() -> Result<()> {
         let alpha = Alphabet::new(None, None)?;
-        assert!(alpha.len() == super::DEFAULT_ALPHABET.len(),
-                "expected {}, actual {}",
-                super::DEFAULT_ALPHABET.len(), alpha.len());
+        assert!(
+            alpha.len() == super::DEFAULT_ALPHABET.len(),
+            "expected {}, actual {}",
+            super::DEFAULT_ALPHABET.len(),
+            alpha.len()
+        );
         Ok(())
     }
 
