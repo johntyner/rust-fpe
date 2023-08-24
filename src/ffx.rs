@@ -25,7 +25,8 @@ pub struct FFX {
     alpha: alphabet::Alphabet,
 }
 
-const DEFAULT_ALPHABET: &str = "0123456789abcdefghijklmnopqrstuvwxyz";
+const DEFAULT_ALPHABET: &str =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 impl FFX {
     pub fn new(
@@ -41,17 +42,21 @@ impl FFX {
             return Err(Error::new("invalid radix"));
         }
 
-        let mut alpha = alphabet::Alphabet::new(match opt_alpha {
-            Some(s) => s,
-            None => DEFAULT_ALPHABET,
-        });
+        let alpha = alphabet::Alphabet::new(
+            match opt_alpha {
+                Some(s) => s,
+                None => DEFAULT_ALPHABET,
+            },
+            Some(radix),
+        )?;
 
-        if radix > alpha.len() {
-            return Err(Error::new("radix too large for alphabet"));
-        }
-
-        alpha.truncate(radix);
-
+        // the minimum required length for both ff1 and ff3-1 is given
+        // by the inequality: radix**minlen >= 1_000_000
+        //
+        // therefore:
+        //  minlen = ceil(log_radix(1_000_000))
+        //         = ceil(log_10(1_000_000) / log_10(radix))
+        //         = ceil(6 / log_10(radix))
         let mintxt = (6f64 / (radix as f64).log10()).ceil() as usize;
         if mintxt < 2 || mintxt > maxtxt {
             return Err(Error::new("unsupported radix/maximum text length"));
@@ -104,6 +109,10 @@ impl FFX {
 
     pub fn get_radix(&self) -> usize {
         self.alpha.len()
+    }
+
+    pub fn get_cipher_block_size(&self) -> usize {
+        self.cipher.block_size()
     }
 
     pub fn validate_text_length(&self, n: usize) -> Result<()> {

@@ -18,11 +18,13 @@ enum CbcType {
 #[derive(Clone)]
 pub struct Cipher {
     enc: CbcType,
+    blksz: usize,
 }
 
 macro_rules! construct_cipher {
     ($type:ident, $key:expr, $iv:expr) => {
         Cipher {
+            blksz: aes::$type::block_size(),
             enc: CbcType::$type(cbc::Encryptor::<aes::$type>::new(
                 $key.into(),
                 $iv.into(),
@@ -58,10 +60,6 @@ impl Cipher {
     }
 
     pub fn block_size(&self) -> usize {
-        match self.enc {
-            CbcType::Aes128(_) => aes::Aes128::block_size(),
-            CbcType::Aes192(_) => aes::Aes192::block_size(),
-            CbcType::Aes256(_) => aes::Aes256::block_size(),
-        }
+        self.blksz
     }
 }

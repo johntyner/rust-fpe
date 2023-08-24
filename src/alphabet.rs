@@ -12,47 +12,54 @@ pub struct Alphabet {
 }
 
 impl Alphabet {
-    fn build_by_ltr(by_pos: &Vec<char>) -> Vec<Letter> {
-        let mut by_ltr = Vec::<Letter>::with_capacity(by_pos.len());
+    pub fn new(s: &str, opt_lim: Option<usize>) -> Result<Alphabet> {
+        let lim = match opt_lim {
+            Some(l) => l,
+            None => 0,
+        };
 
-        for c in by_pos {
+        let mut by_pos = Vec::<char>::new();
+        s.chars().for_each(|c| {
+            if lim > 0 && by_pos.len() < lim {
+                by_pos.push(c)
+            }
+        });
+
+        if lim > 0 && lim > by_pos.len() {
+            return Err(Error::new("not enough letters in alphabet"));
+        }
+
+        let mut by_ltr = Vec::<Letter>::with_capacity(by_pos.len());
+        for c in &by_pos {
             by_ltr.push(Letter {
                 val: *c,
                 pos: by_ltr.len(),
             });
         }
-
         by_ltr.sort_by_key(|l| l.val);
 
-        by_ltr
-    }
-
-    pub fn new(s: &str) -> Alphabet {
-        let mut by_pos = Vec::<char>::new();
-
-        s.chars().for_each(|c| by_pos.push(c));
-
-        Alphabet {
-            by_ltr: Self::build_by_ltr(&by_pos),
-            by_pos: by_pos,
+        for i in 1..by_ltr.len() {
+            if by_ltr[i].val == by_ltr[i - 1].val {
+                return Err(Error::new("duplicate letter(s) in alphabet"));
+            }
         }
+
+        Ok(Alphabet {
+            by_ltr: by_ltr,
+            by_pos: by_pos,
+        })
     }
 
     pub fn len(&self) -> usize {
         self.by_pos.len()
     }
 
-    pub fn truncate(&mut self, len: usize) {
-        if len < self.by_pos.len() {
-            self.by_pos.truncate(len);
-            self.by_ltr = Self::build_by_ltr(&self.by_pos);
-        }
-    }
-
     pub fn ltr(&self, c: char) -> Result<usize> {
         match self.by_ltr.binary_search_by_key(&c, |l| l.val) {
             Ok(i) => Ok(self.by_ltr[i].pos),
-            Err(_) => Err(Error::new("letter not found in alphabet")),
+            Err(_) => {
+                Err(Error::new(&format!("'{}' not found in alphabet", c)))
+            }
         }
     }
 
