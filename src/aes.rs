@@ -8,21 +8,16 @@ use aes::cipher::BlockEncryptMut;
 use aes::cipher::BlockSizeUser;
 use aes::cipher::KeyIvInit;
 
+#[derive(Clone)]
 enum AesType {
-    Aes128Cbc,
-    Aes192Cbc,
-    Aes256Cbc,
+    Aes128Cbc(cbc::Encryptor<aes::Aes128>),
+    Aes192Cbc(cbc::Encryptor<aes::Aes192>),
+    Aes256Cbc(cbc::Encryptor<aes::Aes256>),
 }
 
-union AesCipher {
-    aes128cbc: std::mem::ManuallyDrop<cbc::Encryptor<aes::Aes128>>,
-    aes192cbc: std::mem::ManuallyDrop<cbc::Encryptor<aes::Aes192>>,
-    aes256cbc: std::mem::ManuallyDrop<cbc::Encryptor<aes::Aes256>>,
-}
-
+#[derive(Clone)]
 pub struct Cipher {
-    typ: AesType,
-    aes: AesCipher,
+    aes: AesType,
 }
 
 impl Cipher {
@@ -31,105 +26,46 @@ impl Cipher {
 
         Ok(match key.len() {
             16 => Cipher {
-                typ: AesType::Aes128Cbc,
-                aes: AesCipher {
-                    aes128cbc: std::mem::ManuallyDrop::new(cbc::Encryptor::<
-                        aes::Aes128,
-                    >::new(
-                        key.into(),
-                        IV.into(),
-                    )),
-                },
+                aes: AesType::Aes128Cbc(cbc::Encryptor::<aes::Aes128>::new(
+                    key.into(),
+                    IV.into(),
+                )),
             },
             24 => Cipher {
-                typ: AesType::Aes192Cbc,
-                aes: AesCipher {
-                    aes192cbc: std::mem::ManuallyDrop::new(cbc::Encryptor::<
-                        aes::Aes192,
-                    >::new(
-                        key.into(),
-                        IV.into(),
-                    )),
-                },
+                aes: AesType::Aes192Cbc(cbc::Encryptor::<aes::Aes192>::new(
+                    key.into(),
+                    IV.into(),
+                )),
             },
             32 => Cipher {
-                typ: AesType::Aes256Cbc,
-                aes: AesCipher {
-                    aes256cbc: std::mem::ManuallyDrop::new(cbc::Encryptor::<
-                        aes::Aes256,
-                    >::new(
-                        key.into(),
-                        IV.into(),
-                    )),
-                },
+                aes: AesType::Aes256Cbc(cbc::Encryptor::<aes::Aes256>::new(
+                    key.into(),
+                    IV.into(),
+                )),
             },
             _ => return Err(Error::new("invalid key length")),
         })
     }
 
     pub fn encrypt_block(&mut self, src: &[u8], dst: &mut [u8]) {
-        unsafe {
-            match self.typ {
-                AesType::Aes128Cbc => (*self.aes.aes128cbc)
-                    .encrypt_block_b2b_mut(src.into(), dst.into()),
-                AesType::Aes192Cbc => (*self.aes.aes192cbc)
-                    .encrypt_block_b2b_mut(src.into(), dst.into()),
-                AesType::Aes256Cbc => (*self.aes.aes256cbc)
-                    .encrypt_block_b2b_mut(src.into(), dst.into()),
+        match &mut self.aes {
+            AesType::Aes128Cbc(e) => {
+                e.encrypt_block_b2b_mut(src.into(), dst.into())
+            }
+            AesType::Aes192Cbc(e) => {
+                e.encrypt_block_b2b_mut(src.into(), dst.into())
+            }
+            AesType::Aes256Cbc(e) => {
+                e.encrypt_block_b2b_mut(src.into(), dst.into())
             }
         }
     }
 
     pub fn block_size(&self) -> usize {
-        match self.typ {
-            AesType::Aes128Cbc => aes::Aes128::block_size(),
-            AesType::Aes192Cbc => aes::Aes192::block_size(),
-            AesType::Aes256Cbc => aes::Aes256::block_size(),
-        }
-    }
-}
-
-impl Clone for Cipher {
-    fn clone(&self) -> Self {
-        unsafe {
-            match self.typ {
-                AesType::Aes128Cbc => Cipher {
-                    typ: AesType::Aes128Cbc,
-                    aes: AesCipher {
-                        aes128cbc: self.aes.aes128cbc.clone(),
-                    },
-                },
-                AesType::Aes192Cbc => Cipher {
-                    typ: AesType::Aes192Cbc,
-                    aes: AesCipher {
-                        aes192cbc: self.aes.aes192cbc.clone(),
-                    },
-                },
-                AesType::Aes256Cbc => Cipher {
-                    typ: AesType::Aes256Cbc,
-                    aes: AesCipher {
-                        aes256cbc: self.aes.aes256cbc.clone(),
-                    },
-                },
-            }
-        }
-    }
-}
-
-impl Drop for Cipher {
-    fn drop(&mut self) {
-        unsafe {
-            match self.typ {
-                AesType::Aes128Cbc => {
-                    std::mem::ManuallyDrop::drop(&mut self.aes.aes128cbc)
-                }
-                AesType::Aes192Cbc => {
-                    std::mem::ManuallyDrop::drop(&mut self.aes.aes192cbc)
-                }
-                AesType::Aes256Cbc => {
-                    std::mem::ManuallyDrop::drop(&mut self.aes.aes256cbc)
-                }
-            }
+        match self.aes {
+            AesType::Aes128Cbc(_) => aes::Aes128::block_size(),
+            AesType::Aes192Cbc(_) => aes::Aes192::block_size(),
+            AesType::Aes256Cbc(_) => aes::Aes256::block_size(),
         }
     }
 }
