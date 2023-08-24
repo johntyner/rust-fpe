@@ -25,9 +25,6 @@ pub struct FFX {
     alpha: alphabet::Alphabet,
 }
 
-const DEFAULT_ALPHABET: &str =
-    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
 impl FFX {
     pub fn new(
         key: &[u8],
@@ -42,13 +39,7 @@ impl FFX {
             return Err(Error::new("invalid radix"));
         }
 
-        let alpha = alphabet::Alphabet::new(
-            match opt_alpha {
-                Some(s) => s,
-                None => DEFAULT_ALPHABET,
-            },
-            Some(radix),
-        )?;
+        let alpha = alphabet::Alphabet::new(opt_alpha, Some(radix))?;
 
         // the minimum required length for both ff1 and ff3-1 is given
         // by the inequality: radix**minlen >= 1_000_000

@@ -1,6 +1,9 @@
 use crate::error::Error;
 use crate::result::Result;
 
+const DEFAULT_ALPHABET: &str =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
 struct Letter {
     val: char,
     pos: usize,
@@ -12,7 +15,14 @@ pub struct Alphabet {
 }
 
 impl Alphabet {
-    pub fn new(s: &str, opt_lim: Option<usize>) -> Result<Alphabet> {
+    pub fn new(
+        opt_s: Option<&str>,
+        opt_lim: Option<usize>,
+    ) -> Result<Alphabet> {
+        let s = match opt_s {
+            Some(s) => s,
+            None => DEFAULT_ALPHABET,
+        };
         let lim = match opt_lim {
             Some(l) => l,
             None => 0,
@@ -20,7 +30,7 @@ impl Alphabet {
 
         let mut by_pos = Vec::<char>::new();
         s.chars().for_each(|c| {
-            if lim > 0 && by_pos.len() < lim {
+            if lim == 0 || by_pos.len() < lim {
                 by_pos.push(c)
             }
         });
@@ -64,6 +74,55 @@ impl Alphabet {
     }
 
     pub fn pos(&self, i: usize) -> Result<char> {
+        if i >= self.len() {
+            return Err(Error::new(&format!("no letter at position {}", i)));
+        }
+
         Ok(self.by_pos[i])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::result::Result;
+    use super::Alphabet;
+
+    #[test]
+    fn limited_alphabet() -> Result<()> {
+        let alpha = Alphabet::new(None, Some(10))?;
+        assert!(alpha.len() == 10);
+        Ok(())
+    }
+
+    #[test]
+    fn unlimited_alphabet() -> Result<()> {
+        let alpha = Alphabet::new(None, None)?;
+        assert!(alpha.len() == super::DEFAULT_ALPHABET.len(),
+                "expected {}, actual {}",
+                super::DEFAULT_ALPHABET.len(), alpha.len());
+        Ok(())
+    }
+
+    #[test]
+    fn alphabet_too_small() -> Result<()> {
+        let res = Alphabet::new(Some("123"), Some(10));
+        assert!(res.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn letter_not_found() -> Result<()> {
+        let alpha = Alphabet::new(None, None)?;
+        let res = alpha.ltr('!' as char);
+        assert!(res.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn pos_not_found() -> Result<()> {
+        let alpha = Alphabet::new(None, None)?;
+        let res = alpha.pos(alpha.len() + 1);
+        assert!(res.is_err());
+        Ok(())
     }
 }
