@@ -1,8 +1,7 @@
 //! The FF3-1 algorithm
 //!
 //! The FF3-1 algorithm supports key sizes of 128, 192, and 256 bits.
-//! The (maximum possible) length of the tweak is supplied by the
-//! caller and is essentially unbounded.
+//! The length of the tweak is specified by the algorithm as 56 bits.
 //!
 //! This implementation contains a "context" structure, called FF3_1,
 //! that holds the encryption key, the default tweak, and some other
