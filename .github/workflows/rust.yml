@@ -22,3 +22,22 @@ jobs:
       run: cargo test --verbose
     - name: Benchmarks
       run: cargo bench --verbose
+    - name: Documentation
+      run: cargo doc --no-deps
+    - name: Upload docs
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: target/doc
+
+  deploy-pages:
+
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    steps:
+    - uses: actions/deploy-pages@v2
