@@ -174,7 +174,7 @@ impl FF3_1 {
 
             // the ciph() operation does not support encryption in
             // place, so the output is stored in a separate array,
-            // which is only used one, immediately after the operation
+            // which is only used once, immediately after the operation
             // (step 4iii)
             p[0].reverse();
             {
