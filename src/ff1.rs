@@ -205,17 +205,13 @@ impl FF1 {
                 let (s, d) = r.split_at_mut(blksz);
                 let l = (j - 1) * blksz;
 
-                let w =
-                    byteorder::BigEndian::read_u32(&s[(blksz - 4)..(blksz)]);
+                let w = byteorder::BigEndian::read_u32(&s[blksz - 4..]);
                 byteorder::BigEndian::write_u32(
-                    &mut s[(blksz - 4)..(blksz)],
+                    &mut s[blksz - 4..],
                     w ^ j as u32,
                 );
                 ffx.ciph(s, &mut d[l..l + blksz])?;
-                byteorder::BigEndian::write_u32(
-                    &mut s[(blksz - 4)..(blksz)],
-                    w,
-                );
+                byteorder::BigEndian::write_u32(&mut s[blksz - 4..], w);
             }
 
             // (step 6iv)
@@ -258,7 +254,7 @@ impl FF1 {
         opt_t: Option<&[u8]>,
         which: ffx::CipherType,
     ) -> Result<String> {
-        let mut inp_c = Vec::<char>::new();
+        let mut inp_c = Vec::<char>::with_capacity(inp_s.chars().count());
         inp_s.chars().for_each(|c| inp_c.push(c));
 
         let out_c = self.cipher_chars(&inp_c, opt_t, which)?;
