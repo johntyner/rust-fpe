@@ -251,3 +251,38 @@ impl FF3_1 {
         self.cipher_string(ct, twk, ffx::CipherType::Decrypt)
     }
 }
+
+fn cipher(
+    key: &[u8],
+    twk: Option<&[u8]>,
+    txt: &str,
+    radix: usize,
+    alpha: Option<&str>,
+    op: fn(&FF3_1, &str, Option<&[u8]>) -> Result<String>,
+) -> Result<String> {
+    let ff3_1 = FF3_1::new(key, None, radix, alpha)?;
+    return op(&ff3_1, txt, twk);
+}
+
+pub fn encrypt(
+    key: &[u8],
+    twk: Option<&[u8]>,
+    pt: &str,
+    radix: usize,
+    alpha: Option<&str>,
+) -> Result<String> {
+    return cipher(key, twk, pt, radix, alpha, FF3_1::encrypt);
+}
+
+pub fn decrypt(
+    key: &[u8],
+    twk: Option<&[u8]>,
+    ct: &str,
+    radix: usize,
+    alpha: Option<&str>,
+) -> Result<String> {
+    return cipher(key, twk, ct, radix, alpha, FF3_1::decrypt);
+}
+
+#[cfg(test)]
+mod tests {}

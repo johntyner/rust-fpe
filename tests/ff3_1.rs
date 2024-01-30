@@ -18,6 +18,9 @@ mod tests {
             let out = ff3_1.decrypt(ct, None)?;
             assert!(pt == out, "decrypt: \"{}\" != \"{}\"", pt, out);
 
+            assert!(ct == fpe::ff3_1::encrypt(k, opt_t, pt, r, opt_a)?);
+            assert!(pt == fpe::ff3_1::decrypt(k, opt_t, ct, r, opt_a)?);
+
             Ok(())
         }
 

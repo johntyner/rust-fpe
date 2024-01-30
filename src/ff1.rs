@@ -279,5 +279,37 @@ impl FF1 {
     }
 }
 
+fn cipher(
+    key: &[u8],
+    twk: Option<&[u8]>,
+    txt: &str,
+    radix: usize,
+    alpha: Option<&str>,
+    op: fn(&FF1, &str, Option<&[u8]>) -> Result<String>,
+) -> Result<String> {
+    let ff1 = FF1::new(key, None, 0, 0, radix, alpha)?;
+    return op(&ff1, txt, twk);
+}
+
+pub fn encrypt(
+    key: &[u8],
+    twk: Option<&[u8]>,
+    pt: &str,
+    radix: usize,
+    alpha: Option<&str>,
+) -> Result<String> {
+    return cipher(key, twk, pt, radix, alpha, FF1::encrypt);
+}
+
+pub fn decrypt(
+    key: &[u8],
+    twk: Option<&[u8]>,
+    ct: &str,
+    radix: usize,
+    alpha: Option<&str>,
+) -> Result<String> {
+    return cipher(key, twk, ct, radix, alpha, FF1::decrypt);
+}
+
 #[cfg(test)]
 mod tests {}
